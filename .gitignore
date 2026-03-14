@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+.venv/
+venv/
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+*.pt
+*.json
+!pyproject.toml
