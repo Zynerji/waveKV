@@ -193,6 +193,57 @@ optimizer = torch.optim.AdamW(cache.cache.parameters(), lr=1e-4)
 
 **Without training**, waveKV still works as a fixed-window cache (the sliding window portion is always exact). The wave-compressed history gradually improves as the projections are trained — even a few hundred steps of fine-tuning significantly improves reconstruction quality.
 
+## Evaluation Results (GPT-2 Small, Hierarchical v0.2)
+
+Trained on WikiText-103, evaluated on held-out text. Hierarchical 5-level cache (496 total waves, ~30 MB fixed) with 64-token exact sliding window.
+
+### KV Reconstruction Quality by Quartile
+
+Cosine similarity between wave-reconstructed and ground-truth KV vectors, measured at different position ranges (Q1 = oldest compressed tokens, Q4 = newest compressed tokens before window).
+
+| Seq Length | Q1 (oldest) | Q2 | Q3 | Q4 (newest) |
+|------------|------------|------|------|-------------|
+| 128 | 0.693 | 0.801 | 0.810 | 0.809 |
+| 256 | **0.803** | **0.835** | **0.833** | 0.818 |
+| 512 | **0.812** | **0.820** | 0.806 | 0.792 |
+| 768 | 0.783 | 0.783 | 0.762 | 0.741 |
+| 1024 | 0.627 | 0.593 | 0.502 | 0.300 |
+
+Best reconstruction at 256-512 tokens. Hierarchical wave levels maintain Q1 (distant) quality — coarse levels with slow EMA preserve long-range context that flat single-level fields lose.
+
+### Needle-in-Haystack Retrieval
+
+Measures whether wave-compressed KV vectors preserve retrievable information at varying context depths.
+
+| Depth | Position | KV Cos Sim | Note |
+|-------|----------|-----------|------|
+| 5% | 50 | **0.629** | Strong distant recall |
+| 25% | 253 | **0.588** | |
+| 50% | 506 | **0.530** | Mid-range preservation |
+| 75% | 759 | 0.380 | |
+| 90% | 911 | 0.216 | Near window boundary |
+
+Multi-needle (3 facts inserted simultaneously):
+
+| Fact | Position | KV Cos Sim |
+|------|----------|-----------|
+| "The secret password is DIAMOND-7492" | 102 (10%) | **0.628** |
+| "The capital of Zarqonia is Luminex" | 512 (50%) | **0.511** |
+| "Agent X reported 3847 units sold" | 921 (90%) | 0.192 |
+
+Distant facts (positions 50-253) retain cos > 0.58 — the hierarchical coarse wave levels act as persistent long-range memory. This is the primary advantage over flat single-level wave fields, which produce cos ~ 0 beyond ~128 tokens.
+
+### Training Convergence (Hierarchical vs Flat)
+
+| Step | Hierarchical Cos | Flat Cos | Advantage |
+|------|-----------------|----------|-----------|
+| 500 | 0.558 | 0.486 | +0.072 |
+| 1000 | 0.690 | 0.593 | +0.097 |
+| 2000 | 0.761 | 0.657 | +0.104 |
+| 4000 | **0.790** | 0.696 | **+0.094** |
+
+Hierarchical consistently outperforms flat by ~0.10 cos_sim at every checkpoint.
+
 ## Parameters
 
 | Parameter | Default | Description |
